@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, toCents, fmt } from "./api";
 import { Dashboard } from "./pages/Dashboard";
-import { Register } from "./pages/Register";
-import { Landing } from "./pages/Landing";
+import { Modal } from "./components/Modal";
+import { Register } from "./pages/Register.tsx";
+import { Landing } from "./pages/Landing.tsx";
 
 type Account = { id: number; balance_cents: number; display_number: string };
 type Tx = {
@@ -23,6 +24,38 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
   const [showLanding, setShowLanding] = useState(true);
+
+  // Modal state (explicit open + content)
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState<string | undefined>(undefined);
+  const [modalDesc, setModalDesc] = useState<string | undefined>(undefined);
+  const [modalTone, setModalTone] = useState<"info" | "success" | "error">("info");
+
+  const openModal = (title: string, description: string, tone: "info" | "success" | "error" = "info") => {
+    setModalTitle(title);
+    setModalDesc(description);
+    setModalTone(tone);
+    setModalOpen(true);
+  };
+
+  // Derive modal open from message/error as a safety net
+  useEffect(() => {
+    if (message) {
+      setModalTitle("Success");
+      setModalDesc(message);
+      setModalTone("success");
+      setModalOpen(true);
+    }
+  }, [message]);
+
+  useEffect(() => {
+    if (error) {
+      setModalTitle("Something went wrong");
+      setModalDesc(error);
+      setModalTone("error");
+      setModalOpen(true);
+    }
+  }, [error]);
 
   const clearMessages = () => {
     setMessage(null);
@@ -47,7 +80,9 @@ function App() {
       setAccount(data.account);
       setIsRegistered(true);
       setShowLanding(false);
-      setMessage(`Welcome! Your HSA account has been created successfully.`);
+      const msg = `Welcome! Your HSA account has been created successfully.`;
+      setMessage(msg);
+      openModal("Account created", msg, "success");
       // Always land on dashboard in single-view app
     } catch (e: any) {
       const errorMessage = e?.response?.data?.error;
@@ -77,7 +112,9 @@ function App() {
       const { data } = await api.post(`/accounts/${account.id}/deposits`, {
         amount_cents: cents, note: "Deposit from UI"
       });
-      setMessage(`Deposit successful! Your new balance is ${fmt(data.new_balance_cents)}`);
+      const msg = `Deposit successful. New balance: ${fmt(data.new_balance_cents)}.`;
+      setMessage(msg);
+      openModal("Deposit successful", msg, "success");
       await loadAccount(account.id);
     } catch (e: any) {
       setError(e?.response?.data?.error ?? "Deposit failed. Please try again.");
@@ -93,7 +130,9 @@ function App() {
     try {
       const { data } = await api.post<{ card: Card }>(`/accounts/${account.id}/cards`, {});
       setCard(data.card);
-      setMessage(`Virtual card issued successfully! Card ending in ${data.card.last4}`);
+      const msg = `Virtual card issued successfully. Card ending in ${data.card.last4}.`;
+      setMessage(msg);
+      openModal("Card issued", msg, "success");
     } catch (e: any) {
       setError(e?.response?.data?.error ?? "Failed to issue card. Please try again.");
     } finally {
@@ -119,9 +158,13 @@ function App() {
         card_id: card.id
       });
       if (data.transaction.status === "APPROVED") {
-        setMessage(`Purchase approved! Transaction ID: ${data.transaction.id}`);
+        const msg = `Purchase approved. Amount ${fmt(data.transaction.amount_cents)} at ${merchant}. Tx #${data.transaction.id}.`;
+        setMessage(msg);
+        openModal("Purchase approved", msg, "success");
       } else {
-        setError(`Purchase declined: ${data.transaction.decline_reason || "Unknown reason"}`);
+        const err = `Purchase declined (${data.transaction.decline_reason || "Unknown reason"}). Amount ${fmt(data.transaction.amount_cents)} at ${merchant}.`;
+        setError(err);
+        openModal("Purchase declined", err, "error");
       }
       await loadAccount(account.id);
     } catch (e: any) {
@@ -168,28 +211,6 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-6xl mx-auto p-8">
-        {message && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg animate-fadeIn">
-            <div className="flex items-center">
-              <svg className="h-5 w-5 text-green-400 mr-3" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <p className="text-sm text-green-800 font-medium">{message}</p>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg animate-fadeIn">
-            <div className="flex items-center">
-              <svg className="h-5 w-5 text-red-400 mr-3" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <p className="text-sm text-red-800 font-medium">{error}</p>
-            </div>
-          </div>
-        )}
-
         <Dashboard 
           account={account}
           card={card}
@@ -200,6 +221,15 @@ function App() {
           onPurchase={makePurchase}
         />
       </main>
+
+      {/* Global Action Feedback Modal */}
+      <Modal
+        open={modalOpen}
+        tone={modalTone}
+        title={modalTitle}
+        description={modalDesc}
+        onClose={() => setModalOpen(false)}
+      />
     </div>
   );
 }
