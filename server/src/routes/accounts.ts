@@ -88,3 +88,66 @@ accountsRouter.post("/:accountId/deposits", async (req, res, next) => {
     }
   });
   
+  // helper to generate a simple token & last4
+function randToken(prefix = "card_", n = 12) {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let s = prefix;
+    for (let i = 0; i < n; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    return s;
+  }
+  function randLast4() {
+    return String(Math.floor(1000 + Math.random() * 9000));
+  }
+  
+  // POST /api/accounts/:accountId/cards
+  accountsRouter.post("/:accountId/cards", async (req, res, next) => {
+    try {
+      const accountId = Number(req.params.accountId);
+      if (!Number.isInteger(accountId)) {
+        return res.status(400).json({ error: "invalid accountId" });
+      }
+  
+      // Ensure account exists
+      const account = await get<{ id: number }>(
+        "SELECT id FROM accounts WHERE id = ?",
+        [accountId]
+      );
+      if (!account) return res.status(404).json({ error: "account not found" });
+  
+      // Generate card fields
+      const now = new Date();
+      const expiry_month = now.getMonth() + 1;              // 1..12
+      const expiry_year = now.getFullYear() + 3;            // 3 years out
+      const last4 = randLast4();
+  
+      // Try insert; if token collision (very unlikely), retry
+      let cardId: number | null = null;
+      for (let attempts = 0; attempts < 3; attempts++) {
+        try {
+          const card_token = randToken();
+          const ins = await run(
+            `INSERT INTO cards (account_id, card_token, last4, expiry_month, expiry_year, status)
+             VALUES (?, ?, ?, ?, ?, 'ACTIVE')`,
+            [accountId, card_token, last4, expiry_month, expiry_year]
+          );
+          cardId = ins.lastID;
+          break;
+        } catch (e: any) {
+          // if UNIQUE constraint on card_token, loop and try a new token
+          if (String(e?.message || "").includes("UNIQUE constraint failed: cards.card_token")) continue;
+          throw e;
+        }
+      }
+      if (!cardId) return res.status(500).json({ error: "failed to issue card" });
+  
+      const card = await get<{ id: number; last4: string; expiry_month: number; expiry_year: number; status: string }>(
+        "SELECT id, last4, expiry_month, expiry_year, status FROM cards WHERE id = ?",
+        [cardId]
+      );
+  
+      res.status(201).json({ card });
+    } catch (e) {
+      next(e);
+    }
+  });
+  
