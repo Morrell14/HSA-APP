@@ -13,6 +13,8 @@ npm run migrate    # creates server/hsa.db from db/schema.sql
 npm run dev        # starts API at http://localhost:3001
 # health check:
 # curl http://localhost:3001/api/health -> {"ok":true}
+npm run migrate
+npm run seed
 
 Database
 
