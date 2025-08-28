@@ -84,7 +84,7 @@ export const Register: React.FC<RegisterProps> = ({
                 required
                 icon={UserIcon}
                 className="w-full"
-                style={{ height: 48 }}
+                style={{ height: 56, fontSize: 16 }}
               />
 
               <Input
@@ -96,7 +96,7 @@ export const Register: React.FC<RegisterProps> = ({
                 required
                 icon={MailIcon}
                 className="w-full"
-                style={{ height: 48 }}
+                style={{ height: 56, fontSize: 16 }}
               />
 
               {/* Blue button like landing */}
@@ -108,7 +108,7 @@ export const Register: React.FC<RegisterProps> = ({
                   background: 'var(--blue-600)',
                   color: 'white',
                   borderRadius: '9999px',
-                  padding: '0.85rem 1rem',
+                  padding: '1rem 1.1rem',
                   fontWeight: 600,
                   boxShadow: 'var(--shadow-md)'
                 }}

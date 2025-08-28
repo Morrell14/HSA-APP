@@ -3,7 +3,7 @@ import { get, all, run } from "../db";
 
 export const accountsRouter = Router();
 
-// GET /api/accounts/:accountId  -> balance + recent transactions
+// GET /api/accounts/:accountId  -> balance + latest card + recent transactions
 accountsRouter.get("/:accountId", async (req, res, next) => {
   try {
     const accountId = Number(req.params.accountId);
@@ -17,6 +17,22 @@ accountsRouter.get("/:accountId", async (req, res, next) => {
     );
     if (!account) return res.status(404).json({ error: "account not found" });
 
+    // latest card (if any)
+    const latestCard = await get<{
+      id: number;
+      last4: string;
+      expiry_month: number;
+      expiry_year: number;
+      status: string;
+    }>(
+      `SELECT id, last4, expiry_month, expiry_year, status
+         FROM cards
+        WHERE account_id = ?
+        ORDER BY datetime(created_at) DESC
+        LIMIT 1`,
+      [accountId]
+    );
+
     const transactions = await all(
       `SELECT id, type, amount_cents, status, eligible, decline_reason,
               merchant, category_code, item_code, note, created_at
@@ -27,7 +43,7 @@ accountsRouter.get("/:accountId", async (req, res, next) => {
       [accountId]
     );
 
-    res.json({ account, transactions });
+    res.json({ account, card: latestCard ?? null, transactions });
   } catch (e) {
     next(e);
   }

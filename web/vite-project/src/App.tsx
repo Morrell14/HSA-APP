@@ -19,6 +19,7 @@ function App() {
   const [account, setAccount] = useState<Account | null>(null);
   const [transactions, setTransactions] = useState<Tx[]>([]);
   const [card, setCard] = useState<Card | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,8 +65,9 @@ function App() {
 
   const loadAccount = async (accountId: number) => {
     try {
-      const { data } = await api.get<{ account: Account; transactions: Tx[] }>(`/accounts/${accountId}`);
+      const { data } = await api.get<{ account: Account; card: Card | null; transactions: Tx[] }>(`/accounts/${accountId}`);
       setAccount(data.account);
+      setCard(data.card ?? null);
       setTransactions(data.transactions);
     } catch (e: any) {
       console.error("Failed to load account:", e);
@@ -76,22 +78,23 @@ function App() {
     setLoading(true);
     clearMessages();
     try {
-      const { data } = await api.post<{ user: any; account: Account }>(`/users`, { name, email });
+      const { data } = await api.post<{ user: { id: number; name: string; email: string }; account: Account }>(`/users`, { name, email });
       setAccount(data.account);
+      setUserName(data.user.name);
       setIsRegistered(true);
       setShowLanding(false);
       const msg = `Welcome! Your HSA account has been created successfully.`;
       setMessage(msg);
       openModal("Account created", msg, "success");
+      // Load recent transactions and latest card
+      await loadAccount(data.account.id);
       // Always land on dashboard in single-view app
     } catch (e: any) {
       const errorMessage = e?.response?.data?.error;
-      if (errorMessage?.includes("already exists")) {
-        setError("An account with this email already exists. Please use a different email address.");
-      } else if (errorMessage?.includes("invalid")) {
-        setError("Please check your email format and try again.");
+      if (errorMessage) {
+        setError(errorMessage);
       } else {
-        setError(errorMessage ?? "Failed to create account. Please try again.");
+        setError("Failed to create account. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -151,11 +154,10 @@ function App() {
       return;
     }
     try {
-      const { data } = await api.post(`/accounts/${account.id}/purchases`, {
+      const { data } = await api.post(`/cards/${card.id}/purchases`, {
         amount_cents: cents,
         merchant,
-        category_code: category,
-        card_id: card.id
+        category_code: category
       });
       if (data.transaction.status === "APPROVED") {
         const msg = `Purchase approved. Amount ${fmt(data.transaction.amount_cents)} at ${merchant}. Tx #${data.transaction.id}.`;
@@ -215,6 +217,7 @@ function App() {
           account={account}
           card={card}
           transactions={transactions}
+          userName={userName ?? undefined}
           onRefresh={() => account && loadAccount(account.id)}
           onDeposit={makeDeposit}
           onIssueCard={issueCard}

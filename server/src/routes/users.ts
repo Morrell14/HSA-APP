@@ -6,11 +6,25 @@ export const usersRouter = Router();
 
 usersRouter.post("/", async (req, res, next) => {
   try {
-    const { name, email } = req.body || {};
-    if (!name || !email) return res.status(400).json({ error: "name and email are required" });
+    let { name, email } = req.body || {};
+    name = typeof name === 'string' ? name.trim() : '';
+    email = typeof email === 'string' ? email.trim() : '';
+    if (!name || !email) return res.status(400).json({ error: "Name and email are required" });
+    // basic email validation
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!emailOk) return res.status(400).json({ error: "Invalid email format" });
 
     await run("BEGIN");
-    const u = await run("INSERT INTO users (name, email) VALUES (?,?)", [name, email]);
+    let u;
+    try {
+      u = await run("INSERT INTO users (name, email) VALUES (?,?)", [name, email]);
+    } catch (err: any) {
+      await run("ROLLBACK").catch(() => {});
+      if (String(err?.message || "").includes("UNIQUE constraint failed: users.email")) {
+        return res.status(409).json({ error: "Email already exists" });
+      }
+      return next(err);
+    }
     const userId = u.lastID;
 
     const a = await run(
